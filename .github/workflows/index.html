@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>3D Schematic Viewer (Optimized)</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/nbt@0.8.1/nbt.min.js"></script>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+    <style>
+        body { margin: 0; background: #111; color: #fff; font-family: sans-serif; overflow: hidden; }
+        #ui { position: absolute; top: 10px; left: 10px; z-index: 10; background: rgba(0,0,0,0.7); padding: 15px; border-radius: 8px; }
+        canvas { display: block; }
+        #info { position: absolute; bottom: 10px; left: 10px; font-size: 12px; color: #888; pointer-events: none; }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <input type="file" id="fileInput" accept=".schem">
+        <div id="status" style="margin-top: 10px; font-size: 14px;">Warte auf Datei...</div>
+    </div>
+    <div id="info">Linksklick: Rotieren | Rechtsklick: Pan | Scrollen: Zoom</div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+     const blockColorsHex = {
+            "minecraft:redstone_wire": "#FF0000",
+            "minecraft:redstone_block": "#AA0000",
+            "minecraft:redstone_torch": "#FF0000",
+            "minecraft:redstone_wall_torch": "#FF0000",
+            "minecraft:repeater": "#A0A0A0",
+            "minecraft:comparator": "#A0A0A0",
+            "minecraft:piston": "#7A7A7A",
+            "minecraft:piston_head": "#7A7A7A",
+            "minecraft:sticky_piston": "#7AA07A",
+            "minecraft:slime_block": "#72B04E",
+            "minecraft:hopper": "#4A4A4A",
+            "minecraft:dropper": "#555555",
+            "minecraft:dispenser": "#555555",
+            "minecraft:observer": "#404040",
+            "minecraft:daylight_detector": "#8C7B65",
+            "minecraft:target": "#F3B2A6",
+            "minecraft:powered_rail": "#8A7120",
+            "minecraft:note_block": "#5C4033",
+            "minecraft:scaffolding": "#D7C185",
+            "minecraft:lever": "#808080",
+            "minecraft:light": "#FFD700",
+            
+            "minecraft:white_concrete": "#E3E4D4",
+            "minecraft:orange_concrete": "#E06101",
+            "minecraft:magenta_concrete": "#A9309F",
+            "minecraft:light_blue_concrete": "#2489C7",
+            "minecraft:yellow_concrete": "#F1AF15",
+            "minecraft:lime_concrete": "#5EA919",
+            "minecraft:pink_concrete": "#D5658F",
+            "minecraft:gray_concrete": "#36393D",
+            "minecraft:light_gray_concrete": "#7D7D73",
+            "minecraft:cyan_concrete": "#157788",
+            "minecraft:purple_concrete": "#64209C",
+            "minecraft:blue_concrete": "#2D2F8E",
+            "minecraft:brown_concrete": "#603B20",
+            "minecraft:green_concrete": "#495B24",
+            "minecraft:red_concrete": "#8E2121",
+            "minecraft:black_concrete": "#080A0F",
+
+            "minecraft:terracotta": "#985E44",
+            "minecraft:white_terracotta": "#D2B2A1",
+            "minecraft:orange_terracotta": "#A25426",
+            "minecraft:magenta_terracotta": "#96586D",
+            "minecraft:light_blue_terracotta": "#716D8A",
+            "minecraft:yellow_terracotta": "#BA8523",
+            "minecraft:lime_terracotta": "#677534",
+            "minecraft:pink_terracotta": "#A24D4F",
+            "minecraft:gray_terracotta": "#392A23",
+            "minecraft:light_gray_terracotta": "#876B62",
+            "minecraft:cyan_terracotta": "#565B5B",
+            "minecraft:purple_terracotta": "#764656",
+            "minecraft:blue_terracotta": "#4A3C5B",
+            "minecraft:brown_terracotta": "#4D3324",
+            "minecraft:green_terracotta": "#4C532A",
+            "minecraft:red_terracotta": "#8F3D2F",
+            "minecraft:black_terracotta": "#251610",
+
+            "minecraft:glass": "#A8D5D5",
+            "minecraft:white_stained_glass": "#FFFFFF",
+            "minecraft:orange_stained_glass": "#D87F33",
+            "minecraft:magenta_stained_glass": "#B24CD8",
+            "minecraft:light_blue_stained_glass": "#6699D8",
+            "minecraft:yellow_stained_glass": "#E5E533",
+            "minecraft:lime_stained_glass": "#7FCC19",
+            "minecraft:pink_stained_glass": "#F27FA5",
+            "minecraft:gray_stained_glass": "#4C4C4C",
+            "minecraft:light_gray_stained_glass": "#999999",
+            "minecraft:cyan_stained_glass": "#4C7F99",
+            "minecraft:purple_stained_glass": "#7F3FB2",
+            "minecraft:blue_stained_glass": "#334CB2",
+            "minecraft:brown_stained_glass": "#664C33",
+            "minecraft:green_stained_glass": "#667F33",
+            "minecraft:red_stained_glass": "#993333",
+            "minecraft:black_stained_glass": "#191919",
+
+            "minecraft:light_blue_wool": "#3AA0D0",
+            "minecraft:white_wool": "#E9ECEC",
+            "minecraft:black_wool": "#141519",
+            "minecraft:red_wool": "#A02722",
+
+            "minecraft:stone": "#7D7D7D",
+            "minecraft:dirt": "#866043",
+            "minecraft:grass_block": "#5E7C39",
+            "minecraft:cobblestone": "#808080",
+            "minecraft:bedrock": "#535353",
+            "minecraft:sand": "#DBD3A0",
+            "minecraft:gravel": "#837F7E",
+            "minecraft:chiseled_polished_blackstone": "#2C282C",
+            "minecraft:spruce_trapdoor": "#705434",
+            "minecraft:yellow_wall_banner": "#F1AF15",
+            "minecraft:yellow_banner": "#F1AF15",
+            "minecraft:iron_block": "#E6E6E6",
+            "minecraft:gold_block": "#FCE029",
+            "minecraft:diamond_block": "#5DF6E3",
+            "minecraft:emerald_block": "#50DA86"
+        };
+
+        const colorsCache = {};
+
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        const light = new THREE.DirectionalLight(0xffffff, 3);
+        light.position.set(5, 10, 7.5);
+        scene.add(light);
+        scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+
+        camera.position.set(20, 20, 20);
+
+        function getColor(name) {
+            if (!name || name.includes('air')) return null;
+            const base = name.split('[')[0];
+            if (blockColorsHex[base]) return blockColorsHex[base];
+            let hash = 0;
+            for (let i = 0; i < base.length; i++) hash = base.charCodeAt(i) + ((hash << 5) - hash);
+            return (hash & 0xFFFFFF);
+        }
+
+        function readVarInts(byteArray, count) {
+            const result = new Int32Array(count);
+            let offset = 0;
+            for (let i = 0; i < count; i++) {
+                let value = 0, pos = 0, b;
+                do {
+                    b = byteArray[offset++];
+                    value |= (b & 0x7F) << pos;
+                    pos += 7;
+                } while (b & 0x80);
+                result[i] = value;
+            }
+            return result;
+        }
+
+        async function loadSchematic(file) {
+            document.getElementById('status').innerText = "Lade...";
+            const buffer = await file.arrayBuffer();
+            let data = new Uint8Array(buffer);
+            try { data = pako.ungzip(data); } catch(e) {}
+
+            nbt.parse(data, (err, nbtData) => {
+                if (err) return alert(err);
+                
+                // Szene leeren
+                while(scene.children.length > 2) scene.remove(scene.children[2]);
+
+                const root = nbtData.value;
+                const W = root.Width.value, H = root.Height.value, L = root.Length.value;
+                const palette = root.Palette.value;
+                const blocks = readVarInts(root.BlockData.value, W * H * L);
+
+                const paletteMap = {};
+                const instances = {}; // Gruppierung nach ID für Performance
+
+                Object.keys(palette).forEach(name => {
+                    const id = palette[name].value;
+                    const color = getColor(name);
+                    if (color !== null) {
+                        paletteMap[id] = color;
+                        instances[id] = [];
+                    }
+                });
+
+                for (let y = 0; y < H; y++) {
+                    for (let z = 0; z < L; z++) {
+                        for (let x = 0; x < W; x++) {
+                            const id = blocks[(y * L + z) * W + x];
+                            if (instances[id]) instances[id].push({x, y, z});
+                        }
+                    }
+                }
+
+                const geometry = new THREE.BoxGeometry(1, 1, 1);
+                Object.keys(instances).forEach(id => {
+                    const coords = instances[id];
+                    const mesh = new THREE.InstancedMesh(geometry, new THREE.MeshStandardMaterial({color: paletteMap[id]}), coords.length);
+                    const dummy = new THREE.Object3D();
+                    coords.forEach((c, i) => {
+                        dummy.position.set(c.x, c.y, c.z);
+                        dummy.updateMatrix();
+                        mesh.setMatrixAt(i, dummy.matrix);
+                    });
+                    scene.add(mesh);
+                });
+
+                controls.target.set(W/2, H/2, L/2);
+                camera.position.set(W*1.5, H*1.5, L*1.5);
+                controls.update();
+                document.getElementById('status').innerText = `Fertig: ${W}x${H}x${L}`;
+            });
+        }
+
+        document.getElementById('fileInput').onchange = e => loadSchematic(e.target.files[0]);
+        window.onresize = () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        };
+
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
+        animate();
+    </script>
+</body>
+</html>
